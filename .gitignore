@@ -1,0 +1,26 @@
+
+# Python virtual environment
+backend/ACES/
+backend/.venv/
+backend/venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Node dependencies and build
+frontend/node_modules/
+frontend/dist/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Local Django database
+backend/db.sqlite3
+
+# Editor and OS files
+.vscode/
+.DS_Store
+Thumbs.db
