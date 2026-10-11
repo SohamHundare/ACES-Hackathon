@@ -16,10 +16,17 @@ const marketKeys = {
 }
 
 function localizeDistance(value, t) {
-  return value.replace(/\bkm\b/g, t('unit.km'))
+  return typeof value === 'number'
+    ? `${value} ${t('unit.km')}`
+    : value.replace(/\bkm\b/g, t('unit.km'))
 }
 
 function localizeEta(value, t) {
+  if (typeof value === 'number') {
+    const hours = Math.floor(value)
+    const minutes = Math.round((value - hours) * 60)
+    return `${hours} ${t('unit.hours')} ${minutes} ${t('unit.minutes')}`
+  }
   const hourDuration = value.match(/^(\d+)h\s*(\d+)m$/)
   if (hourDuration) return `${hourDuration[1]} ${t('unit.hours')} ${hourDuration[2]} ${t('unit.minutes')}`
   const minuteDuration = value.match(/^(\d+)\s*mins$/)
@@ -41,11 +48,11 @@ function MarketTable({ markets }) {
         </thead>
         <tbody>
           {markets.map((market) => (
-            <tr className={market.best ? 'best-market' : ''} key={market.name}>
-              <td><div className="market-name"><span className={market.best ? 'market-pin is-best' : 'market-pin'}><MapPin size={14} /></span><span><strong>{marketKeys[market.name] ? t(marketKeys[market.name]) : market.name}</strong><small>{marketKeys[market.area] ? t(marketKeys[market.area]) : market.area}</small></span></div></td>
-              <td>{localizeDistance(market.distance, t)}</td><td>{localizeEta(market.eta, t)}</td><td><strong>{market.price.replace('/kg', `/${t('unit.kg')}`)}</strong></td>
+            <tr className={market.best ? 'best-market' : ''} key={market.market_name || market.name}>
+              <td><div className="market-name"><span className={market.best ? 'market-pin is-best' : 'market-pin'}><MapPin size={14} /></span><span><strong>{marketKeys[market.market_name || market.name] ? t(marketKeys[market.market_name || market.name]) : market.market_name || market.name}</strong><small>{marketKeys[market.area] ? t(marketKeys[market.area]) : market.area || ''}</small></span></div></td>
+              <td>{localizeDistance(market.distance_km ?? market.distance, t)}</td><td>{localizeEta(market.duration_hours ?? market.eta, t)}</td><td><strong>{market.price ? market.price.replace('/kg', `/${t('unit.kg')}`) : market.mandi_price_per_kg !== undefined ? `₹${Number(market.mandi_price_per_kg).toFixed(1)}/${t('unit.kg')}` : '—'}</strong></td>
               <td><span className="risk-value"><i />{market.risk}</span></td>
-              <td className={market.best ? 'return-value' : ''}>{market.realization}</td>
+              <td className={market.best ? 'return-value' : ''}>{market.net_profit === undefined ? market.realization : `₹${Math.round(market.net_profit).toLocaleString('en-IN')}`}</td>
               <td><span className={market.best ? 'recommendation is-best' : 'recommendation'}>{market.best && <CircleCheck size={12} />}{t(market.recommendation === 'Best Choice' ? 'comparison.best' : market.recommendation === 'Good demand' ? 'comparison.goodDemand' : 'comparison.profitable')}</span></td>
             </tr>
           ))}
@@ -55,8 +62,9 @@ function MarketTable({ markets }) {
   )
 }
 
-export function MarketComparison({ markets = defaultMarkets, footerNote = 'comparison.footer', footerRight }) {
+export function MarketComparison({ markets, footerNote = 'comparison.footer', footerRight }) {
   const { t } = useTranslation()
+  const displayedMarkets = markets === undefined ? defaultMarkets : markets
 
   return (
     <section className="market-section">
@@ -64,7 +72,7 @@ export function MarketComparison({ markets = defaultMarkets, footerNote = 'compa
         <div><h2>{t('comparison.title')}</h2><p>{t('comparison.subtitle')}</p></div>
         <span className="candidate-count"><MapPin size={13} />{t('comparison.candidates')}</span>
       </div>
-      <MarketTable markets={markets} />
+      <MarketTable markets={displayedMarkets} />
       <div className="table-footer"><span><Check size={13} />{t(footerNote)}</span>{footerRight ? <span className="table-footer-right">{footerRight}</span> : <a href="#market-analytics">{t('comparison.viewAll')} <ArrowRight size={13} /></a>}</div>
     </section>
   )

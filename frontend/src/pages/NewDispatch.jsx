@@ -22,13 +22,13 @@ import { useTranslation } from '../i18n/useTranslation.js'
 
 const crops = [
   { name: 'tomatoes', group: 'standard', price: 36, spoilage: 8.4, transit: '12h', change: '+4.2%', image: 'photo-1546094096-0df4bcaaa337' },
-  { name: 'onions', group: 'standard', price: 28, spoilage: 3.1, transit: '48h', change: '+3.1%', image: 'photo-1518977676601-b53f82aba655' },
+  { name: 'onions', group: 'standard', price: 28, spoilage: 3.1, transit: '48h', change: '+3.1%', image: 'photo-1618512496248-a07fe83aa8cb' },
   { name: 'potatoes', group: 'standard', price: 25, spoilage: 1.3, transit: '36h', change: '-1.3%', image: 'photo-1518977676601-b53f82aba655', position: '78% center' },
   { name: 'capsicum', group: 'standard', price: 42, spoilage: 6.8, transit: '12h', change: '+6.8%', image: 'photo-1563565375-f3fdfdbefa83' },
   { name: 'spinach', group: 'leafy', price: 30, spoilage: 8.4, transit: '3h', change: '+4.1%', image: 'photo-1576045057995-568f588f82fb' },
-  { name: 'coriander', group: 'leafy', price: 50, spoilage: 9.5, transit: '3h', change: '+5.8%', image: 'photo-1610832958506-aa56368176cf' },
-  { name: 'fenugreek', group: 'leafy', price: 34, spoilage: 8.2, transit: '3h', change: '+3.2%', image: 'photo-1518977676601-b53f82aba655', position: 'center' },
-  { name: 'amaranth', group: 'leafy', price: 32, spoilage: 10, transit: '3h', change: '-2.0%', image: 'photo-1576045057995-568f588f82fb', position: '70% center' },
+  { name: 'coriander', group: 'leafy', price: 50, spoilage: 9.5, transit: '3h', change: '+5.8%', image: 'photo-1588879460618-9249e7d947d1' },
+  { name: 'fenugreek', group: 'leafy', price: 34, spoilage: 8.2, transit: '3h', change: '+3.2%', image: 'photo-1588242386288-4e8456b44cc3', position: 'center' },
+  { name: 'amaranth', group: 'leafy', price: 32, spoilage: 10, transit: '3h', change: '-2.0%', image: 'photo-1786725961483-40a1720f2a5a', position: '70% center' },
 ]
 
 const vehicles = [
@@ -100,7 +100,7 @@ function HarvestVolume({ volume, onVolumeChange }) {
   )
 }
 
-function VehiclePicker({ vehicle, onSelect }) {
+function VehiclePicker({ vehicle, onSelect, isCalculating }) {
   const { t } = useTranslation()
 
   return (
@@ -117,28 +117,38 @@ function VehiclePicker({ vehicle, onSelect }) {
           </button>
         ))}
       </div>
-      <button className="calculate-button" type="submit"><Sparkles size={15} />{t('dispatch.calculate')}<ArrowRight size={16} /></button>
+      <button className="calculate-button" type="submit" disabled={isCalculating}><Sparkles size={15} />{isCalculating ? 'Calculating Routes...' : t('dispatch.calculate')}<ArrowRight size={16} /></button>
       <p className="calculation-note"><ShieldCheck size={12} />{t('dispatch.calculationNote')}</p>
     </section>
   )
 }
 
-function EstimateCard({ crop, volume, vehicle }) {
+function EstimateCard({ crop, volume, vehicle, apiResult }) {
   const { t } = useTranslation()
-  const gross = crop.price * volume
-  const logistics = 114 * 2 * vehicle.rate
-  const spoilage = Math.ceil((gross * crop.spoilage / 100) / 10) * 10
-  const takeHome = Math.max(0, gross - logistics - spoilage)
+  const market = apiResult?.best_market
+  const gross = market?.gross_revenue ?? crop.price * volume
+  const logistics = market?.transport_cost ?? 114 * 2 * vehicle.rate
+  const spoilage = market?.perishability_loss ?? Math.ceil((gross * crop.spoilage / 100) / 10) * 10
+  const takeHome = market?.net_profit ?? Math.max(0, gross - logistics - spoilage)
+  const mandiPrice = market?.mandi_price_per_kg ?? crop.price
+  const distance = market?.distance_km
+  const duration = market?.duration_hours
+  const displayDistance = distance === undefined
+    ? `114 ${t('unit.km')}`
+    : `${distance} ${t('unit.km')}`
+  const displayDuration = duration === undefined
+    ? `2 ${t('unit.hours')} 20 ${t('unit.minutes')}`
+    : `${duration} ${t('unit.hours')}`
 
   return (
     <article className="estimate-card">
       <div className="estimate-title"><span><BadgeCheck size={14} />{t('dispatch.optimalMarket')}</span><span className="best-choice"><CircleCheck size={11} />{t('dispatch.firstChoice')}</span></div>
-      <h2>{t('market.vashi')}</h2>
+      <h2>{market?.market_name || market?.name || t('market.vashi')}</h2>
       <p className="estimate-location"><MapPin size={12} />{t('dispatch.naviMumbai')}</p>
-      <div className="net-estimate"><span>{t('dispatch.estimate')} <Info size={11} /></span><strong>{money(takeHome)}</strong><small><TrendingUp size={11} />{t('dispatch.mandiPrice', { price: crop.price })}</small></div>
-      <div className="journey-details"><span><Navigation size={14} /><b>114 {t('unit.km')}</b><small>{t('dispatch.distance')}</small></span><span><Clock3 size={14} /><b>2 {t('unit.hours')} 20 {t('unit.minutes')}</b><small>{t('dispatch.driveTime')}</small></span></div>
+      <div className="net-estimate"><span>{t('dispatch.estimate')} <Info size={11} /></span><strong>{money(takeHome)}</strong><small><TrendingUp size={11} />{t('dispatch.mandiPrice', { price: Number(mandiPrice).toFixed(1) })}</small></div>
+      <div className="journey-details"><span><Navigation size={14} /><b>{displayDistance}</b><small>{t('dispatch.distance')}</small></span><span><Clock3 size={14} /><b>{displayDuration}</b><small>{t('dispatch.driveTime')}</small></span></div>
       <div className="breakdown-title">{t('dispatch.breakdown')}</div>
-      <div className="breakdown-row"><span><TrendingUp size={13} /><span>{t('dispatch.grossValue')}<small>{t('dispatch.volumePrice', { volume: volume.toLocaleString('en-IN'), price: crop.price })}</small></span></span><strong>{money(gross)}</strong></div>
+      <div className="breakdown-row"><span><TrendingUp size={13} /><span>{t('dispatch.grossValue')}<small>{t('dispatch.volumePrice', { volume: volume.toLocaleString('en-IN'), price: Number(mandiPrice).toFixed(1) })}</small></span></span><strong>{money(gross)}</strong></div>
       <div className="breakdown-row"><span><Truck size={13} /><span>{t('dispatch.logistics')}<small>{t('dispatch.roundTrip')}</small></span></span><strong>− {money(logistics)}</strong></div>
       <div className="breakdown-row"><span><Leaf size={13} /><span>{t('dispatch.spoilageBuffer')}<small>{t('dispatch.qualityLoss', { rate: crop.spoilage })}</small></span></span><strong>− {money(spoilage)}</strong></div>
       <div className="take-home"><span><Wallet size={14} />{t('dispatch.takeHome')}</span><strong>{money(takeHome)}</strong></div>
@@ -147,13 +157,13 @@ function EstimateCard({ crop, volume, vehicle }) {
   )
 }
 
-function Advisory({ crop, speaking, onListen, locale }) {
+function Advisory({ crop, speaking, onListen, locale, aiText }) {
   const { t } = useTranslation()
 
   return (
     <article className="advisory-card">
       <div className="advisory-title"><span><Sparkles size={17} /></span><div><strong>{t('dispatch.advisoryTitle')}</strong><small>{t('dispatch.advisoryLabel')}</small></div></div>
-      <p>{t('dispatch.advisoryBody', { crop: t(`crop.${crop.name}`).toLowerCase(), price: crop.price })}</p>
+      <p>{aiText || t('dispatch.advisoryBody', { crop: t(`crop.${crop.name}`).toLowerCase(), price: crop.price })}</p>
       <button className="listen-button" type="button" onClick={onListen} aria-pressed={speaking}><Volume2 size={14} />{speaking ? t('dispatch.stop') : t('dispatch.listen', { language: t(`language.${locale}`) })}</button>
       <small className="advisory-disclaimer">{t('dispatch.advisoryDisclaimer')}</small>
     </article>
@@ -166,6 +176,9 @@ export function NewDispatch() {
   const [volume, setVolume] = useState(500)
   const [vehicle, setVehicle] = useState(vehicles[0])
   const [speaking, setSpeaking] = useState(false)
+  const [apiData, setApiData] = useState(null)
+  const [isCalculating, setIsCalculating] = useState(false)
+  const [error, setError] = useState('')
 
   function handleListen() {
     if (!('speechSynthesis' in window)) return
@@ -186,6 +199,52 @@ export function NewDispatch() {
     event.preventDefault()
     setSpeaking(false)
     window.speechSynthesis?.cancel()
+    setError('')
+    setApiData(null)
+    setIsCalculating(true)
+
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by this browser.')
+      setIsCalculating(false)
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const response = await fetch('http://127.0.0.1:8000/api/optimize/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              crop: selectedCrop.name,
+              quantity: volume,
+            }),
+          })
+
+          const data = await response.json()
+          if (!response.ok) {
+            throw new Error(data.detail || data.error || `Request failed (${response.status}).`)
+          }
+
+          setApiData(data)
+        } catch (requestError) {
+          setError(requestError instanceof Error ? requestError.message : 'Could not calculate dispatch routes.')
+        } finally {
+          setIsCalculating(false)
+        }
+      },
+      (locationError) => {
+        setError(
+          locationError.code === locationError.PERMISSION_DENIED
+            ? 'Location permission was denied. Allow location access and try again.'
+            : 'Unable to get your location. Please try again.',
+        )
+        setIsCalculating(false)
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    )
   }
 
   return (
@@ -198,14 +257,15 @@ export function NewDispatch() {
         <form className="dispatch-form" onSubmit={handleCalculate}>
           <CropPicker selectedCrop={selectedCrop} onSelect={setSelectedCrop} />
           <HarvestVolume volume={volume} onVolumeChange={setVolume} />
-          <VehiclePicker vehicle={vehicle} onSelect={setVehicle} />
+          <VehiclePicker vehicle={vehicle} onSelect={setVehicle} isCalculating={isCalculating} />
+          {error && <p role="alert">{error}</p>}
         </form>
         <aside className="dispatch-results">
-          <EstimateCard crop={selectedCrop} volume={volume} vehicle={vehicle} />
-          <Advisory crop={selectedCrop} speaking={speaking} onListen={handleListen} locale={locale} />
+          <EstimateCard crop={selectedCrop} volume={volume} vehicle={vehicle} apiResult={apiData} />
+          <Advisory crop={selectedCrop} speaking={speaking} onListen={handleListen} locale={locale} aiText={apiData?.ai_advisory} />
         </aside>
       </div>
-      <MarketComparison />
+      <MarketComparison markets={apiData?.all_markets} />
     </div>
   )
 }

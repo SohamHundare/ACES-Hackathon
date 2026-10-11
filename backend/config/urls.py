@@ -16,7 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from api.views import optimize_dispatch
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/optimize/', optimize_dispatch, name='optimize_dispatch'),
 ]
