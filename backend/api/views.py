@@ -157,7 +157,7 @@ def optimize_dispatch(request):
             )
 
         gross_revenue = quantity * mandi_price
-        transport_cost = distance_km * 10 * 2
+        transport_cost = distance_km * 10 
         perishability_loss = gross_revenue * (duration_hours * 0.015)
         net_profit = gross_revenue - transport_cost - perishability_loss
         all_markets.append(

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChartNoAxesCombined, Info, ShieldCheck } from 'lucide-react'
 import { MarketComparison } from '../components/MarketComparison.jsx'
 import { useTranslation } from '../i18n/useTranslation.js'
@@ -21,11 +21,39 @@ const marketRoutes = [
   { name: 'Solapur APMC', area: 'Solapur', distance: 252, eta: '4h 45m' },
 ]
 
+const DISPATCH_CACHE_KEY = 'cropscout_latest_dispatch'
+const DISPATCH_UPDATED_EVENT = 'cropscout_dispatch_updated'
+
+function readCachedDispatch() {
+  try {
+    const saved = localStorage.getItem(DISPATCH_CACHE_KEY)
+    return saved ? JSON.parse(saved) : null
+  } catch (error) {
+    console.error('Unable to load the cached dispatch for market analytics.', error)
+    return null
+  }
+}
+
 function formatMoney(value) {
   return `₹${Math.round(value).toLocaleString('en-IN')}`
 }
 
-function makeComparisonRows(commodity) {
+function makeComparisonRows(commodity, liveMarkets) {
+  if (liveMarkets) {
+    return [...liveMarkets]
+      .sort((first, second) => second.net_profit - first.net_profit)
+      .map((market, index) => ({
+        ...market,
+        name: market.market_name || market.name,
+        area: market.area || '',
+        price: market.price || `₹${Number(market.mandi_price_per_kg).toFixed(1)}/kg`,
+        risk: market.risk ?? '—',
+        realization: market.net_profit === undefined ? '—' : formatMoney(market.net_profit),
+        recommendation: index === 0 ? 'Best Choice' : 'Profitable',
+        best: index === 0,
+      }))
+  }
+
   return marketRoutes.map((market, index) => {
     const price = commodity.prices[index]
     const risk = commodity.risks[index]
@@ -48,9 +76,19 @@ function makeComparisonRows(commodity) {
     .map((market, index) => ({ ...market, recommendation: index === 0 ? 'Best Choice' : 'Profitable', best: index === 0 }))
 }
 
-function PriceComparison({ commodity }) {
+function PriceComparison({ commodity, markets }) {
   const { t } = useTranslation()
-  const highestPrice = Math.max(...commodity.prices)
+  const prices = markets.map((market, index) => {
+    if (market.mandi_price_per_kg !== undefined) {
+      return Number(market.mandi_price_per_kg)
+    }
+    if (market.price !== undefined) {
+      const parsedPrice = Number(String(market.price).replace(/[^\d.]/g, ''))
+      if (Number.isFinite(parsedPrice)) return parsedPrice
+    }
+    return commodity.prices[index] ?? 0
+  })
+  const highestPrice = Math.max(...prices, 1)
 
   return (
     <section className="price-chart-panel" aria-label={t('analytics.chartAria', { crop: t(`crop.${commodity.name.toLowerCase()}`) })}>
@@ -59,15 +97,21 @@ function PriceComparison({ commodity }) {
         <div><h2>{t('analytics.modalPrices', { crop: t(`crop.${commodity.name.toLowerCase()}`) })}</h2><p>{t('analytics.perKg')}</p></div>
       </div>
       <div className="price-bars">
-        {marketRoutes.map((market, index) => (
-          <div className="price-row" key={market.name}>
-            <span className="price-market-name">{t(`market.${market.name.split(' ')[0].toLowerCase()}`)}</span>
-            <div className="price-track" role="meter" aria-label={t('analytics.priceAria', { market: t(`market.${market.name.split(' ')[0].toLowerCase()}`), crop: t(`crop.${commodity.name.toLowerCase()}`) })} aria-valuemin="0" aria-valuemax={highestPrice} aria-valuenow={commodity.prices[index]}>
-              <span style={{ width: `${(commodity.prices[index] / highestPrice) * 100}%` }} />
+        {markets.map((market, index) => {
+          const marketName = market.market_name || market.name
+          const marketKey = `market.${marketName.split(' ')[0].toLowerCase()}`
+          const translatedMarket = t(marketKey)
+          const displayMarket = translatedMarket === marketKey ? marketName : translatedMarket
+          return (
+          <div className="price-row" key={marketName}>
+            <span className="price-market-name">{displayMarket}</span>
+            <div className="price-track" role="meter" aria-label={t('analytics.priceAria', { market: displayMarket, crop: t(`crop.${commodity.name.toLowerCase()}`) })} aria-valuemin="0" aria-valuemax={highestPrice} aria-valuenow={prices[index]}>
+              <span style={{ width: `${(prices[index] / highestPrice) * 100}%` }} />
             </div>
-            <strong className="price-value">₹{commodity.prices[index]}<small>/{t('unit.kg')}</small></strong>
+            <strong className="price-value">₹{prices[index].toFixed(1)}<small>/{t('unit.kg')}</small></strong>
           </div>
-        ))}
+          )
+        })}
       </div>
     </section>
   )
@@ -76,13 +120,27 @@ function PriceComparison({ commodity }) {
 export function MarketAnalytics() {
   const { t } = useTranslation()
   const [selectedCommodity, setSelectedCommodity] = useState(commodities[0])
-  const comparisonRows = makeComparisonRows(selectedCommodity)
+  const [cachedData, setCachedData] = useState(readCachedDispatch)
+
+  useEffect(() => {
+    const updateCachedDispatch = () => setCachedData(readCachedDispatch())
+    window.addEventListener(DISPATCH_UPDATED_EVENT, updateCachedDispatch)
+    return () => window.removeEventListener(DISPATCH_UPDATED_EVENT, updateCachedDispatch)
+  }, [])
+
+  const cachedCrop = cachedData?.selected_crop?.name || cachedData?.crop
+  const hasMatchingLiveData =
+    cachedCrop?.toLowerCase() === selectedCommodity.name.toLowerCase()
+  const liveMarkets = hasMatchingLiveData && Array.isArray(cachedData?.all_markets)
+    ? cachedData.all_markets
+    : null
+  const comparisonRows = makeComparisonRows(selectedCommodity, liveMarkets)
 
   return (
     <div className="analytics-page">
       <div className="analytics-heading">
         <div><p className="eyebrow">{t('analytics.eyebrow')}</p><h1>{t('analytics.title')}</h1><p className="heading-subtitle">{t('analytics.subtitle')}</p></div>
-        <span className="simulated-data"><ShieldCheck size={12} />{t('analytics.simulated')}</span>
+        <span className="simulated-data"><ShieldCheck size={12} />{liveMarkets ? 'Live dispatch data' : t('analytics.simulated')}</span>
       </div>
       <div className="commodity-tabs" role="tablist" aria-label={t('analytics.selectCommodity')}>
         {commodities.map((commodity) => (
@@ -99,7 +157,7 @@ export function MarketAnalytics() {
           </button>
         ))}
       </div>
-      <PriceComparison commodity={selectedCommodity} />
+      <PriceComparison commodity={selectedCommodity} markets={comparisonRows} />
       <MarketComparison
         markets={comparisonRows}
         footerNote="comparison.simulated"

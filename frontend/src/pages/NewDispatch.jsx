@@ -126,31 +126,52 @@ function VehiclePicker({ vehicle, onSelect, isCalculating }) {
 function EstimateCard({ crop, volume, vehicle, apiResult }) {
   const { t } = useTranslation()
   const market = apiResult?.best_market
-  const gross = market?.gross_revenue ?? crop.price * volume
-  const logistics = market?.transport_cost ?? 114 * 2 * vehicle.rate
-  const spoilage = market?.perishability_loss ?? Math.ceil((gross * crop.spoilage / 100) / 10) * 10
-  const takeHome = market?.net_profit ?? Math.max(0, gross - logistics - spoilage)
+  const staticGross = crop.price * volume
+  const staticLogistics = 114 * 2 * vehicle.rate
+  const staticSpoilage = Math.ceil((staticGross * crop.spoilage / 100) / 10) * 10
+  const { gross, logistics, spoilage, takeHome } = market
+    ? {
+        gross: market.gross_revenue,
+        logistics: market.transport_cost,
+        spoilage: market.perishability_loss,
+        takeHome: market.net_profit,
+      }
+    : {
+        gross: staticGross,
+        logistics: staticLogistics,
+        spoilage: staticSpoilage,
+        takeHome: Math.max(0, staticGross - staticLogistics - staticSpoilage),
+      }
   const mandiPrice = market?.mandi_price_per_kg ?? crop.price
+  const spoilageRate = market
+    ? gross > 0 ? (spoilage / gross) * 100 : 0
+    : crop.spoilage
   const distance = market?.distance_km
   const duration = market?.duration_hours
   const displayDistance = distance === undefined
     ? `114 ${t('unit.km')}`
     : `${distance} ${t('unit.km')}`
   const displayDuration = duration === undefined
-    ? `2 ${t('unit.hours')} 20 ${t('unit.minutes')}`
-    : `${duration} ${t('unit.hours')}`
+    ? apiResult
+      ? '—'
+      : `2 ${t('unit.hours')} 20 ${t('unit.minutes')}`
+    : (() => {
+        const hrs = Math.floor(duration)
+        const mins = Math.round((duration - hrs) * 60)
+        return hrs === 0 ? `${mins} mins` : `${hrs} hrs ${mins} mins`
+      })()
 
   return (
     <article className="estimate-card">
       <div className="estimate-title"><span><BadgeCheck size={14} />{t('dispatch.optimalMarket')}</span><span className="best-choice"><CircleCheck size={11} />{t('dispatch.firstChoice')}</span></div>
       <h2>{market?.market_name || market?.name || t('market.vashi')}</h2>
-      <p className="estimate-location"><MapPin size={12} />{t('dispatch.naviMumbai')}</p>
+      <p className="estimate-location"><MapPin size={12} />{market ? market.area || '' : t('dispatch.naviMumbai')}</p>
       <div className="net-estimate"><span>{t('dispatch.estimate')} <Info size={11} /></span><strong>{money(takeHome)}</strong><small><TrendingUp size={11} />{t('dispatch.mandiPrice', { price: Number(mandiPrice).toFixed(1) })}</small></div>
       <div className="journey-details"><span><Navigation size={14} /><b>{displayDistance}</b><small>{t('dispatch.distance')}</small></span><span><Clock3 size={14} /><b>{displayDuration}</b><small>{t('dispatch.driveTime')}</small></span></div>
       <div className="breakdown-title">{t('dispatch.breakdown')}</div>
       <div className="breakdown-row"><span><TrendingUp size={13} /><span>{t('dispatch.grossValue')}<small>{t('dispatch.volumePrice', { volume: volume.toLocaleString('en-IN'), price: Number(mandiPrice).toFixed(1) })}</small></span></span><strong>{money(gross)}</strong></div>
       <div className="breakdown-row"><span><Truck size={13} /><span>{t('dispatch.logistics')}<small>{t('dispatch.roundTrip')}</small></span></span><strong>− {money(logistics)}</strong></div>
-      <div className="breakdown-row"><span><Leaf size={13} /><span>{t('dispatch.spoilageBuffer')}<small>{t('dispatch.qualityLoss', { rate: crop.spoilage })}</small></span></span><strong>− {money(spoilage)}</strong></div>
+      <div className="breakdown-row"><span><Leaf size={13} /><span>{t('dispatch.spoilageBuffer')}<small>{t('dispatch.qualityLoss', { rate: spoilageRate.toFixed(1) })}</small></span></span><strong>− {money(spoilage)}</strong></div>
       <div className="take-home"><span><Wallet size={14} />{t('dispatch.takeHome')}</span><strong>{money(takeHome)}</strong></div>
       <p className="estimate-footnote"><ShieldCheck size={11} />{t('dispatch.estimateNote')}</p>
     </article>
@@ -228,7 +249,17 @@ export function NewDispatch() {
             throw new Error(data.detail || data.error || `Request failed (${response.status}).`)
           }
 
+          const cachedDispatch = {
+            selected_crop: selectedCrop,
+            crop: selectedCrop.name,
+            volume,
+            best_market: data.best_market,
+            all_markets: data.all_markets,
+            ai_advisory: data.ai_advisory,
+          }
+          localStorage.setItem('cropscout_latest_dispatch', JSON.stringify(cachedDispatch))
           setApiData(data)
+          window.dispatchEvent(new Event('cropscout_dispatch_updated'))
         } catch (requestError) {
           setError(requestError instanceof Error ? requestError.message : 'Could not calculate dispatch routes.')
         } finally {
@@ -251,7 +282,7 @@ export function NewDispatch() {
     <div className="dispatch-page">
       <div className="dispatch-page-heading">
         <div><p className="eyebrow">{t('dispatch.eyebrow')}</p><h1>{t('dispatch.title')}</h1><p className="heading-subtitle">{t('dispatch.subtitle')}</p></div>
-        <span className="simulated-data"><ShieldCheck size={12} />{t('dispatch.simulated')}</span>
+        <span className="simulated-data"><ShieldCheck size={12} />{apiData ? 'Live market data' : t('dispatch.simulated')}</span>
       </div>
       <div className="dispatch-layout">
         <form className="dispatch-form" onSubmit={handleCalculate}>

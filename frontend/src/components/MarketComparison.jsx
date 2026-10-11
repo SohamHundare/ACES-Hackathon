@@ -16,6 +16,7 @@ const marketKeys = {
 }
 
 function localizeDistance(value, t) {
+  if (value === undefined || value === null) return '—'
   return typeof value === 'number'
     ? `${value} ${t('unit.km')}`
     : value.replace(/\bkm\b/g, t('unit.km'))
@@ -23,10 +24,11 @@ function localizeDistance(value, t) {
 
 function localizeEta(value, t) {
   if (typeof value === 'number') {
-    const hours = Math.floor(value)
-    const minutes = Math.round((value - hours) * 60)
-    return `${hours} ${t('unit.hours')} ${minutes} ${t('unit.minutes')}`
+    const hrs = Math.floor(value)
+    const mins = Math.round((value - hrs) * 60)
+    return hrs === 0 ? `${mins} mins` : `${hrs} hrs ${mins} mins`
   }
+  if (value === undefined || value === null) return '—'
   const hourDuration = value.match(/^(\d+)h\s*(\d+)m$/)
   if (hourDuration) return `${hourDuration[1]} ${t('unit.hours')} ${hourDuration[2]} ${t('unit.minutes')}`
   const minuteDuration = value.match(/^(\d+)\s*mins$/)
@@ -47,15 +49,31 @@ function MarketTable({ markets }) {
           </tr>
         </thead>
         <tbody>
-          {markets.map((market) => (
-            <tr className={market.best ? 'best-market' : ''} key={market.market_name || market.name}>
-              <td><div className="market-name"><span className={market.best ? 'market-pin is-best' : 'market-pin'}><MapPin size={14} /></span><span><strong>{marketKeys[market.market_name || market.name] ? t(marketKeys[market.market_name || market.name]) : market.market_name || market.name}</strong><small>{marketKeys[market.area] ? t(marketKeys[market.area]) : market.area || ''}</small></span></div></td>
-              <td>{localizeDistance(market.distance_km ?? market.distance, t)}</td><td>{localizeEta(market.duration_hours ?? market.eta, t)}</td><td><strong>{market.price ? market.price.replace('/kg', `/${t('unit.kg')}`) : market.mandi_price_per_kg !== undefined ? `₹${Number(market.mandi_price_per_kg).toFixed(1)}/${t('unit.kg')}` : '—'}</strong></td>
-              <td><span className="risk-value"><i />{market.risk}</span></td>
-              <td className={market.best ? 'return-value' : ''}>{market.net_profit === undefined ? market.realization : `₹${Math.round(market.net_profit).toLocaleString('en-IN')}`}</td>
-              <td><span className={market.best ? 'recommendation is-best' : 'recommendation'}>{market.best && <CircleCheck size={12} />}{t(market.recommendation === 'Best Choice' ? 'comparison.best' : market.recommendation === 'Good demand' ? 'comparison.goodDemand' : 'comparison.profitable')}</span></td>
-            </tr>
-          ))}
+          {markets.map((market) => {
+            const marketName = market.market_name || market.name
+            const distance = market.distance_km ?? market.distance
+            const duration = market.duration_hours ?? market.eta
+            const price = market.price
+              ? market.price.replace('/kg', `/${t('unit.kg')}`)
+              : market.mandi_price_per_kg !== undefined
+                ? `₹${Number(market.mandi_price_per_kg).toFixed(1)}/${t('unit.kg')}`
+                : '—'
+            const netRealization = market.net_profit !== undefined
+              ? `₹${Math.round(market.net_profit).toLocaleString('en-IN')}`
+              : market.realization
+
+            return (
+              <tr className={market.best ? 'best-market' : ''} key={marketName}>
+                <td><div className="market-name"><span className={market.best ? 'market-pin is-best' : 'market-pin'}><MapPin size={14} /></span><span><strong>{marketKeys[marketName] ? t(marketKeys[marketName]) : marketName}</strong><small>{marketKeys[market.area] ? t(marketKeys[market.area]) : market.area || ''}</small></span></div></td>
+                <td>{localizeDistance(distance, t)}</td>
+                <td>{localizeEta(duration, t)}</td>
+                <td><strong>{price}</strong></td>
+                <td><span className="risk-value"><i />{market.risk}</span></td>
+                <td className={market.best ? 'return-value' : ''}>{netRealization}</td>
+                <td><span className={market.best ? 'recommendation is-best' : 'recommendation'}>{market.best && <CircleCheck size={12} />}{t(market.recommendation === 'Best Choice' ? 'comparison.best' : market.recommendation === 'Good demand' ? 'comparison.goodDemand' : 'comparison.profitable')}</span></td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
